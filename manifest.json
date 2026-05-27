@@ -1,0 +1,25 @@
+{
+  "name": "点滴滴下シミュレーター",
+  "short_name": "点滴シミュ",
+  "description": "輸液量・時間・滴下数から1分あたりの滴下数を計算し、点滴筒のアニメーションで表示するシミュレーターです",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f0f6fb",
+  "theme_color": "#1a4f7a",
+  "orientation": "portrait-primary",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

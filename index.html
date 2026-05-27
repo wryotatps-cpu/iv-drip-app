@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>点滴滴下シミュレーター</title>
+  <meta name="description" content="輸液量・時間・滴下数から1分あたりの滴下数を計算し、点滴筒のアニメーションで表示します">
+  <meta name="theme-color" content="#1a4f7a">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <style>
+    :root {
+      --bg: #f0f6fb;
+      --surface: #ffffff;
+      --surface2: #e8f2fa;
+      --border: #c2d8ec;
+      --accent: #1a6fad;
+      --accent2: #2a9fd4;
+      --text: #0d2a3e;
+      --text2: #4a6a80;
+      --drop: #1a6fad;
+      --chamber-fill: #daedf8;
+      --chamber-border: #1a6fad;
+      --liquid: #7bc3e8;
+      --tube: #a8d4f0;
+      --radius: 12px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0a1a28;
+        --surface: #0f2336;
+        --surface2: #162d42;
+        --border: #1e4060;
+        --accent: #3a9fdd;
+        --accent2: #60c0f0;
+        --text: #d8eaf8;
+        --text2: #6a9ab8;
+        --drop: #3a9fdd;
+        --chamber-fill: #0d2030;
+        --chamber-border: #3a9fdd;
+        --liquid: #1a5070;
+        --tube: #1a3850;
+      }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      width: 100%;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    header svg { width: 28px; height: 28px; flex-shrink: 0; }
+    header h1 { font-size: 17px; font-weight: 600; color: var(--accent); letter-spacing: 0.02em; }
+    header span { font-size: 12px; color: var(--text2); margin-left: auto; }
+
+    main {
+      width: 100%;
+      max-width: 520px;
+      padding: 16px 16px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-title::before {
+      content: '';
+      display: inline-block;
+      width: 3px;
+      height: 13px;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .input-group:last-of-type { margin-bottom: 0; }
+
+    .input-group label {
+      font-size: 13px;
+      color: var(--text);
+      min-width: 148px;
+      flex-shrink: 0;
+    }
+
+    .input-group input[type="number"],
+    .input-group select {
+      flex: 1;
+      min-width: 0;
+      height: 38px;
+      padding: 0 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      color: var(--text);
+      font-family: inherit;
+      transition: border-color 0.15s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .input-group select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a6a80' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 30px;
+    }
+
+    .input-group input:focus,
+    .input-group select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .unit {
+      font-size: 12px;
+      color: var(--text2);
+      min-width: 44px;
+      flex-shrink: 0;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 2px;
+    }
+
+    .metric {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      text-align: center;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      color: var(--text2);
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+
+    .metric-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-unit {
+      font-size: 11px;
+      color: var(--text2);
+      margin-top: 4px;
+    }
+
+    .formula {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text2);
+      line-height: 1.7;
+    }
+
+    .formula code {
+      font-family: 'Menlo', 'Courier New', monospace;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .visual-wrap {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    canvas {
+      display: block;
+      flex-shrink: 0;
+    }
+
+    .info-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 4px;
+    }
+
+    .status-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    .status-box.veryfast { border-color: #c0200a; }
+    .status-box.fast     { border-color: #e05a2a; }
+    .status-box.normal   { border-color: #1a9a60; }
+    .status-box.slow     { border-color: #b0a020; }
+    .status-box.veryslow { border-color: #7a7a9a; }
+
+    .status-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+
+    .veryfast .status-badge { background: #fcd0c8; color: #800808; }
+    .fast .status-badge     { background: #fde8de; color: #a03010; }
+    .normal .status-badge   { background: #d8f5e8; color: #0a6040; }
+    .slow .status-badge     { background: #f5f0d0; color: #706010; }
+    .veryslow .status-badge { background: #e8e8f0; color: #404060; }
+
+    @media (prefers-color-scheme: dark) {
+      .veryfast .status-badge { background: #500a08; color: #ffb0a0; }
+      .fast .status-badge     { background: #401808; color: #f0a080; }
+      .normal .status-badge   { background: #083020; color: #60d090; }
+      .slow .status-badge     { background: #302800; color: #d0c050; }
+      .veryslow .status-badge { background: #202030; color: #9090c0; }
+    }
+
+    .guide {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--text2);
+      line-height: 1.8;
+    }
+
+    .guide strong { color: var(--text); font-weight: 600; }
+
+    footer {
+      margin-top: auto;
+      padding: 16px;
+      font-size: 11px;
+      color: var(--text2);
+      text-align: center;
+    }
+
+    #offline-notice {
+      display: none;
+      background: #1a6fad;
+      color: #fff;
+      font-size: 12px;
+      text-align: center;
+      padding: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="offline-notice">オフラインモードで動作中</div>
+
+<header>
+  <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="12" y="0" width="4" height="8" rx="2" fill="var(--accent)"/>
+    <path d="M9 8 Q8 15 7 20 L21 20 Q20 15 19 8 Z" fill="var(--tube)"/>
+    <rect x="7" y="20" width="14" height="6" rx="2" fill="var(--chamber-fill)" stroke="var(--accent)" stroke-width="1"/>
+    <circle cx="14" cy="17" r="2" fill="var(--drop)"/>
+  </svg>
+  <h1>点滴滴下シミュレーター</h1>
+  <span id="header-rate">—</span>
+</header>
+
+<main>
+  <div class="card">
+    <div class="card-title">入力パラメータ</div>
+
+    <div class="input-group">
+      <label for="vol">輸液量</label>
+      <input type="number" id="vol" value="500" min="1" max="5000" step="50" inputmode="numeric">
+      <span class="unit">mL</span>
+    </div>
+
+    <div class="input-group">
+      <label for="time">輸液時間</label>
+      <input type="number" id="time" value="4" min="0.1" max="24" step="0.5" inputmode="decimal">
+      <span class="unit">時間</span>
+    </div>
+
+    <div class="input-group">
+      <label for="drops">1mLあたりの滴下数</label>
+      <select id="drops">
+        <option value="20" selected>20滴（成人用）</option>
+        <option value="60">60滴（小児用）</option>
+        <option value="15">15滴</option>
+      </select>
+      <span class="unit">滴/mL</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">計算結果</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <label style="font-size:13px;color:var(--text);">ビープ音</label>
+      <button id="sound-toggle" onclick="toggleSound()" style="
+        padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);
+        background:var(--surface2);color:var(--text2);font-size:12px;
+        cursor:pointer;font-family:inherit;transition:all 0.15s;">
+        🔇 オフ
+      </button>
+      <span style="font-size:12px;color:var(--text2);">— 計算した滴下速度でビープを鳴らす</span>
+    </div>
+    <div class="result-grid">
+      <div class="metric">
+        <div class="metric-label">1分あたりの滴下数</div>
+        <div class="metric-value" id="result-min">—</div>
+        <div class="metric-unit">滴 / 分</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">1秒あたりの滴下数</div>
+        <div class="metric-value" id="result-sec">—</div>
+        <div class="metric-unit">滴 / 秒</div>
+      </div>
+    </div>
+    <div class="formula">
+      計算式：<code>滴/分 = 輸液量(mL) × 滴下数(滴/mL) ÷ 輸液時間(分)</code>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">点滴筒シミュレーション</div>
+    <div class="visual-wrap">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <canvas id="dripCanvas" width="96" height="240"></canvas>
+        <span id="canvas-label" style="font-size:11px;color:var(--text2);">—</span>
+      </div>
+      <div class="info-col">
+        <div class="status-box" id="status-box">
+          パラメータを入力すると、速度の評価が表示されます。
+        </div>
+        <div class="guide">
+          <strong>臨床での速度目安（成人・20滴/mL）</strong><br>
+          ⚠️ 超急速：100滴超 / 分（緊急時のみ）<br>
+          🔴 急速：60〜100滴 / 分（180mL/h超）<br>
+          🟠 やや速い：40〜59滴 / 分（120〜179mL/h）<br>
+          🟢 標準：20〜39滴 / 分（60〜119mL/h）<br>
+          🟡 やや遅い：10〜19滴 / 分（30〜59mL/h）<br>
+          ⚪ 遅い：10滴未満 / 分（30mL/h未満）<br>
+          <span style="font-size:11px;opacity:0.7;">※成人標準：約2mL/kg/時（60kgで約120mL/h＝40滴/分）</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>点滴滴下シミュレーター — オフライン対応 PWA</footer>
+
+<script>
+  // --- Canvas Animation ---
+  const canvas = document.getElementById('dripCanvas');
+  const ctx = canvas.getContext('2d');
+  const CW = canvas.width, CH = canvas.height;
+
+  const TUBE_X = 42, TUBE_Y = 0, TUBE_W = 12, TUBE_H = 26;
+  const CONE_TOP_Y = 26, CONE_BTM_Y = 66;
+  const CHAM_X = 24, CHAM_Y = 66, CHAM_W = 48, CHAM_H = 112;
+  const DRIP_Y = CHAM_Y + 8;
+  const LAND_Y = CHAM_Y + CHAM_H - 10;
+  const OUTLET_Y = CHAM_Y + CHAM_H;
+
+  let drops = [];
+  let dropsPerSec = 0;
+  let lastSpawn = 0;
+  let rafId = null;
+
+  function getCSS(v) {
+    return getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  }
+
+  function drawFrame(ts) {
+    rafId = requestAnimationFrame(drawFrame);
+    ctx.clearRect(0, 0, CW, CH);
+
+    const tube    = getCSS('--tube');
+    const cFill   = getCSS('--chamber-fill');
+    const cBorder = getCSS('--chamber-border');
+    const liquid  = getCSS('--liquid');
+    const drop    = getCSS('--drop');
+    const outletC = getCSS('--tube');
+
+    // --- Tube top ---
+    ctx.fillStyle = tube;
+    roundRect(ctx, TUBE_X, TUBE_Y, TUBE_W, TUBE_H, 3);
+    ctx.fill();
+
+    // --- Cone ---
+    ctx.fillStyle = tube;
+    ctx.beginPath();
+    ctx.moveTo(28, CONE_TOP_Y);
+    ctx.quadraticCurveTo(26, 46, CHAM_X, CONE_BTM_Y);
+    ctx.lineTo(CHAM_X + CHAM_W, CONE_BTM_Y);
+    ctx.quadraticCurveTo(CW - 26, 46, CW - 28, CONE_TOP_Y);
+    ctx.closePath();
+    ctx.fill();
+
+    // --- Chamber ---
+    ctx.fillStyle = cFill;
+    roundRect(ctx, CHAM_X, CHAM_Y, CHAM_W, CHAM_H, 6);
+    ctx.fill();
+
+    // Liquid pool at bottom
+    ctx.save();
+    roundRect(ctx, CHAM_X, CHAM_Y, CHAM_W, CHAM_H, 6);
+    ctx.clip();
+    ctx.fillStyle = liquid;
+    ctx.globalAlpha = 0.45;
+    ctx.fillRect(CHAM_X, LAND_Y - 4, CHAM_W, CHAM_H - (LAND_Y - 4 - CHAM_Y));
+    ctx.restore();
+
+    ctx.strokeStyle = cBorder;
+    ctx.lineWidth = 1.8;
+    roundRect(ctx, CHAM_X, CHAM_Y, CHAM_W, CHAM_H, 6);
+    ctx.stroke();
+
+    // --- Outlet tube ---
+    ctx.fillStyle = outletC;
+    roundRect(ctx, CW/2 - 4, OUTLET_Y, 8, CH - OUTLET_Y, 4);
+    ctx.fill();
+    ctx.strokeStyle = cBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(CW/2 - 6, OUTLET_Y);
+    ctx.lineTo(CW/2 + 6, OUTLET_Y);
+    ctx.stroke();
+
+    // --- Spawn drops ---
+    if (dropsPerSec > 0) {
+      const interval = 1000 / dropsPerSec;
+      if (ts - lastSpawn >= interval) {
+        const speed = Math.min(3.8, 1.0 + dropsPerSec * 0.04);
+        drops.push({ y: DRIP_Y, speed });
+        lastSpawn = ts;
+      }
+    }
+
+    // --- Draw & update drops ---
+    drops = drops.filter(d => d.y <= LAND_Y + 4);
+    drops.forEach(d => {
+      d.y += d.speed;
+      const progress = (d.y - DRIP_Y) / (LAND_Y - DRIP_Y);
+      const alpha = progress > 0.85 ? 1 - (progress - 0.85) / 0.15 : 1;
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+      ctx.fillStyle = drop;
+      ctx.beginPath();
+      ctx.ellipse(CW / 2, d.y, 4, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  if (rafId) cancelAnimationFrame(rafId);
+  drops = [];
+  lastSpawn = 0;
+  rafId = requestAnimationFrame(drawFrame);
+
+  // --- Calculation ---
+  function calc() {
+    const vol   = parseFloat(document.getElementById('vol').value);
+    const hours = parseFloat(document.getElementById('time').value);
+    const dpml  = parseFloat(document.getElementById('drops').value);
+
+    if (!vol || !hours || !dpml || vol <= 0 || hours <= 0) {
+      document.getElementById('result-min').textContent = '—';
+      document.getElementById('result-sec').textContent = '—';
+      document.getElementById('canvas-label').textContent = '—';
+      document.getElementById('header-rate').textContent = '—';
+      document.getElementById('status-box').className = 'status-box';
+      document.getElementById('status-box').innerHTML = 'パラメータを入力してください。';
+      dropsPerSec = 0;
+      stopBeep();
+      return;
+    }
+
+    const dpm = (vol * dpml) / (hours * 60);
+    const dps = dpm / 60;
+    dropsPerSec = dps;
+
+    document.getElementById('result-min').textContent = dpm.toFixed(1);
+    document.getElementById('result-sec').textContent = dps.toFixed(2);
+    document.getElementById('canvas-label').textContent = dpm.toFixed(1) + ' 滴/分';
+    document.getElementById('header-rate').textContent = dpm.toFixed(1) + ' 滴/分';
+
+    const secPerDrop = (60 / dpm).toFixed(1);
+    const secPer10 = (600 / dpm).toFixed(1);
+    const box = document.getElementById('status-box');
+    const mLh = (dpm / dpml * 60).toFixed(0);
+
+    let cls, badge, desc;
+    if (dpm > 100) {
+      cls = 'veryfast'; badge = '⚠️ 超急速';
+      desc = '緊急輸液レベルです。慎重に管理してください。';
+    } else if (dpm >= 60) {
+      cls = 'fast'; badge = '🔴 急速';
+      desc = '急速投与域です。循環器系への負荷に注意。';
+    } else if (dpm >= 40) {
+      cls = 'fast'; badge = '🟠 やや速い';
+      desc = '通常より速めの投与速度です。';
+    } else if (dpm >= 20) {
+      cls = 'normal'; badge = '🟢 標準';
+      desc = '成人の一般的な維持輸液速度です。';
+    } else if (dpm >= 10) {
+      cls = 'slow'; badge = '🟡 やや遅い';
+      desc = '維持輸液としてはやや遅めです。';
+    } else {
+      cls = 'veryslow'; badge = '⚪ 遅い';
+      desc = '微量投与域です。';
+    }
+
+    box.className = 'status-box ' + cls;
+    box.innerHTML =
+      '<span class="status-badge">' + badge + '</span><br>' +
+      dpm.toFixed(1) + ' 滴/分（' + mLh + ' mL/h）<br>' +
+      '約 ' + secPerDrop + ' 秒に1滴 ／ 10秒で約 ' + (dpm/6).toFixed(1) + ' 滴<br>' +
+      '<span style="font-size:11px;opacity:0.8;">' + desc + '</span>';
+
+    updateBeep(dpm);
+  }
+
+  ['vol','time','drops'].forEach(id => {
+    document.getElementById(id).addEventListener('input', calc);
+  });
+  calc();
+
+  // --- Sound (Web Audio API beep) ---
+  var audioCtx = null;
+  var soundOn = false;
+  var beepInterval = null;
+
+  function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  function playBeep() {
+    try {
+      const ctx = getAudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.08);
+    } catch(e) {}
+  }
+
+  function startBeep(dpm) {
+    stopBeep();
+    if (!soundOn || dpm <= 0) return;
+    const intervalMs = Math.max(300, 60000 / dpm);
+    playBeep();
+    beepInterval = setInterval(playBeep, intervalMs);
+  }
+
+  function stopBeep() {
+    if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
+  }
+
+  function updateBeep(dpm) {
+    if (soundOn) startBeep(dpm);
+  }
+
+  function toggleSound() {
+    soundOn = !soundOn;
+    const btn = document.getElementById('sound-toggle');
+    if (soundOn) {
+      btn.textContent = '🔔 オン';
+      btn.style.background = 'var(--accent)';
+      btn.style.color = '#fff';
+      btn.style.borderColor = 'var(--accent)';
+      const dpm = parseFloat(document.getElementById('result-min').textContent);
+      if (!isNaN(dpm)) startBeep(dpm);
+    } else {
+      btn.textContent = '🔇 オフ';
+      btn.style.background = 'var(--surface2)';
+      btn.style.color = 'var(--text2)';
+      btn.style.borderColor = 'var(--border)';
+      stopBeep();
+    }
+  }
+
+  // --- PWA / Service Worker ---
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  // --- Offline banner ---
+  function updateOnline() {
+    document.getElementById('offline-notice').style.display = navigator.onLine ? 'none' : 'block';
+  }
+  window.addEventListener('online',  updateOnline);
+  window.addEventListener('offline', updateOnline);
+  updateOnline();
+</script>
+</body>
+</html>
